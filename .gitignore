@@ -90,3 +90,4 @@ ENV/
 *.
 *.npz
 *.meta
+*.pkl

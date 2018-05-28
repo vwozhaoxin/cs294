@@ -10,6 +10,7 @@ import os
 import copy
 import matplotlib.pyplot as plt
 from cheetah_env import HalfCheetahEnvNew
+import tqdm
 
 def sample(env, 
            controller, 
@@ -24,7 +25,29 @@ def sample(env,
     """
     paths = []
     """ YOUR CODE HERE """
-
+    for _ in range(num_paths):
+        path={}
+        observations=[]
+        next_observations=[]
+        reward=[]
+        actions=[]
+        done_mask=[]
+        obs = env.reset()
+        for _ in range(horizon):
+            next_obs,rew,done,info =env.step(controller.get_action(obs))
+            observations.append(obs)
+            reward.append(rew)
+            done_mask.append(done)
+            next_observations.append(next_obs)
+            actions.append(controller.get_action(obs))
+            obs = next_obs
+        path = {'observations':observations,
+                'reward':reward,
+                'actions':actions,
+                'next_observations':next_observations}
+        paths.append(path)    
+    if render:env.render()
+    if verbose:print(paths)
     return paths
 
 # Utility to compute cost a path for a given cost function
@@ -38,6 +61,15 @@ def compute_normalization(data):
     """
 
     """ YOUR CODE HERE """
+    ob_no = np.concatenate([path["observations"] for path in data])
+    ne_ob_np = np.concatenate([path["next_observations"] for path in data])
+    ac_na = np.concatenate([path["actions"] for path in data])
+    mean_obs=np.mean(ob_no,0)
+    std_obs=np.std(ob_no,0)
+    mean_deltas= np.mean(ne_ob_np-ob_no,0)
+    std_deltas= np.std(ne_ob_np-ob_no,0)
+    mean_action= np.mean(ac_na,0)
+    std_action= np.std(ac_na,0)
     return mean_obs, std_obs, mean_deltas, std_deltas, mean_action, std_action
 
 
@@ -46,7 +78,31 @@ def plot_comparison(env, dyn_model):
     Write a function to generate plots comparing the behavior of the model predictions for each element of the state to the actual ground truth, using randomly sampled actions. 
     """
     """ YOUR CODE HERE """
-    pass
+    #pass
+    obs = env.reset()
+    obs1 = obs
+    ac = env.action_space.sample()
+    label = []
+    pred = []
+    while True:
+        ac = env.action_space.sample()
+        next_obs,reward,done,info = env.step(ac)
+        label.append(next_obs)
+        next_obs1= dyn_model.predict(obs1,ac)
+        pred.append(next_obs1)
+        obs = next_obs
+        obs1 = next_obs1
+        if done:
+            break
+    label = np.array(label)
+    pred = np.array(pred)
+    x = np.arrange(len(label))
+    plt.plot(x,pred)
+    plt.plot(x,label)
+    plt.xlabel('timesteps')
+    plt.ylabel('obs')
+    plt.legend(loc='best')
+    plt.show()
 
 def train(env, 
          cost_fn,
@@ -112,6 +168,8 @@ def train(env,
     random_controller = RandomController(env)
 
     """ YOUR CODE HERE """
+    
+    paths = sample(env=env,controller=random_controller,num_paths=num_paths_random)
 
 
     #========================================================
@@ -122,7 +180,8 @@ def train(env,
     # for normalizing inputs and denormalizing outputs
     # from the dynamics network. 
     # 
-    normalization = """ YOUR CODE HERE """
+    normalization = compute_normalization(paths)
+    """ YOUR CODE HERE """
 
 
     #========================================================
@@ -161,10 +220,22 @@ def train(env,
     # Take multiple iterations of onpolicy aggregation at each iteration refitting the dynamics model to current dataset and then taking onpolicy samples and aggregating to the dataset. 
     # Note: You don't need to use a mixing ratio in this assignment for new and old data as described in https://arxiv.org/abs/1708.02596
     # 
-    for itr in range(onpol_iters):
+
+    for itr in tqdm.tqdm(range(onpol_iters)):
         """ YOUR CODE HERE """
-
-
+        #ob_no = np.concatenate([path["observation"] for path in paths])
+        #ne_ob_np = np.concatenate([path["next_observation"] for path in paths])
+        #ac_na = np.concatenate([path["action"] for path in paths])
+        dyn_model.fit(paths)
+        #obs= env.reset()
+        
+        #for t in range(env_horizon):
+        #theta = mpc_controller.get_action(dyn_model.predict(obs))
+        dataset = sample(env=env,controller=mpc_controller,num_paths=num_simulated_paths)
+        paths = paths.extend(dataset)
+        costs = np.array([path_cost(cost_fn,path) for path in paths])
+        returns = np.array([np.sum(path['reward'] for path in paths)])
+        plot_comparison(env,dyn_model)
 
         # LOGGING
         # Statistics for performance of MPC policy using

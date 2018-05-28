@@ -14,12 +14,17 @@ class Controller():
 class RandomController(Controller):
 	def __init__(self, env):
 		""" YOUR CODE HERE """
-		pass
+		#pass
+		self.env = env
+
 
 	def get_action(self, state):
 		""" YOUR CODE HERE """
+
 		""" Your code should randomly sample an action uniformly from the action space """
-		pass
+		#pass
+		return self.env.action_space.sample()
+
 
 
 class MPCcontroller(Controller):
@@ -40,4 +45,16 @@ class MPCcontroller(Controller):
 	def get_action(self, state):
 		""" YOUR CODE HERE """
 		""" Note: be careful to batch your simulations through the model for speed """
+		acs,ob,obs,costs,next_obs =[],[],[],[],[]
+		[ob.append(state) for path in range(self.num_simulated_paths)]
+		for i in range(self.horizon):
+			ac=[]
+			obs.append(ob)
+			[ac.append(self.env.action_space.sample()) for path in range(self.num_simulated_paths)]
+			acs.append(ac)
+			ob=self.dyn_model.predict(np.array(ob),np.array(ac))
+			next_obs.append(ob)
+		costs =trajectory_cost_fn(self.cost_fn,np.array(obs),np.array(acs),np.array(next_obs))
+		j = np.argmin(costs)
 
+		return acs[0][j]
